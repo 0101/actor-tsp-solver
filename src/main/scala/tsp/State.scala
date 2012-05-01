@@ -18,16 +18,20 @@ case class State(
 
   override def toString = {
     
-    val zeroIndex = path indexOf 0
     val len = path.length
-    val leftOfZero = path((zeroIndex - 1 + len) % len)
-    val rightOfZero = path((zeroIndex + 1 + len) % len)
-    val direction = if (leftOfZero > rightOfZero) 1 else -1
-    
-    val normalizedPath = for ((n, i) <- path.iterator.zipWithIndex) 
-      yield path(((direction * i) + zeroIndex + len) % len) 
-    
-    "cost: %s path: %s".format(cost, normalizedPath mkString " ")
+    if (len < 1) 
+      "no path, cost: %s" format cost
+    else {    
+	  val zeroIndex = path indexOf 0
+	  val leftOfZero = path((zeroIndex - 1 + len) % len)
+	  val rightOfZero = path((zeroIndex + 1 + len) % len)
+	  val direction = if (leftOfZero > rightOfZero) 1 else -1
+	  
+	  val normalizedPath = for ((n, i) <- path.iterator.zipWithIndex) 
+	    yield path(((direction * i) + zeroIndex + len) % len) 
+	  
+	  "cost: %s path: %s".format(cost, normalizedPath mkString " ")
+    }
   }
 
 }

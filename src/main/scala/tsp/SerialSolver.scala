@@ -6,10 +6,10 @@ import scala.collection.mutable.Stack
 
 object SerialSolver extends Solver {
    
-  def solve(graph: Graph, initialState: State, best: State): State = {
+  def solve(graph: Graph, initialState: State, best: State) = {
 
     // stupid static typing
-    val None = -1
+    val none = -1
 
     val stack = Stack[State]()
 
@@ -33,7 +33,7 @@ object SerialSolver extends Solver {
 
       val firstMove = state.path.isEmpty
 
-      val src = if (firstMove) None else state.path.last
+      val src = if (firstMove) none else state.path.last
 
       for (node <- state.remaining.sorted)
         stack.push(State(

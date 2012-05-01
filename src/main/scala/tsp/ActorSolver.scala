@@ -3,16 +3,14 @@ package tsp
 import scala.collection.mutable.Queue
 
 import akka.actor._
-import akka.routing.{RoundRobinRouter, Broadcast}
 import akka.dispatch.Await
+import akka.pattern.ask
+import akka.routing.{RoundRobinRouter, Broadcast}
 import akka.util.Duration
 import akka.util.duration._
-import akka.pattern.ask
 
 sealed trait TspMessage
-
 case object Start extends TspMessage
-
 case class Work(state: State) extends TspMessage
 case class Best(state: State) extends TspMessage
 case class Result(result: State) extends TspMessage
@@ -22,33 +20,29 @@ class Worker(solver: Solver, graph: Graph) extends Actor {
 
   var localBest = State.worst
   
-  def receive = {
+  def receive = {  
     
-    case Work(state) => 
-      println("worker received work", state)
-      sender ! Result(process(state))
+    case Work(state) => sender ! Result(process(state))
       
-    case Best(state) => 
-      println("worker received best", state)
-      localBest = state
+    case Best(state) => localBest = state
       
-    case _ => println("worker received unknown message")
-    
-  }
+    case _ => println("worker received unknown message")     
+  }  
   
   def process(state: State) = {
-    localBest = solver.solve(graph, initialState=state, best=localBest)
+    localBest = solver solve Task(graph, initialState=state, best=localBest)
     localBest
-  }
-  
+  }  
 }
 
     
 class Master(
     solver: Solver, 
-    graph: Graph, initialState: State, best: State,
+    task: Task, 
     workerCount: Int, 
     initialExpandRatio: Int) extends Actor {
+  
+  val Task(graph, initialState, best) = task
   
   var globalBest = best
 
@@ -60,50 +54,21 @@ class Master(
       	.withRouter(RoundRobinRouter(workerCount)),
       name="workerRouter")
   
-  val queue = Queue[State]()
+  val queue = Queue[State](initialState)
   
   var customer: ActorRef = null
 
-  def initialExpand() {
-	  queue.enqueue(initialState)
-	  
-	  val initialExpand = workerCount * initialExpandRatio
-	  while (queue.size < initialExpand && !queue.isEmpty)
-	    expandStep(queue.dequeue())
-  }
-  
-  def expandStep(state: State) {
-    
-	// TODO: DRY with serial solver
-    
-    if (!(state betterThan globalBest)) return
-   
-    if (state.remaining.isEmpty) {
-      // last move
-      val src = state.path.last
-      val dest = state.path(0)
-      val cost = state.cost + (graph distance src -> dest)
-      val finalState = State(state.path, State.emptySeq, cost)
-      if (finalState betterThan globalBest)
-        globalBest = finalState
-    }
-  
-    val firstMove = state.path.isEmpty
-  
-    val src = if (firstMove) -1 else state.path.last
-  
-    for (node <- state.remaining.sorted)
-      queue.enqueue(State(
-        state.path :+ node,
-        state.remaining filter (_ != node),
-        state.cost + (if (firstMove) 0 else graph distance src -> node)))
+  def initialExpand() {	  
+	  val initialSize = workerCount * initialExpandRatio
+	  while (queue.size < initialSize && !queue.isEmpty)
+	    globalBest = Solver.expandStep(state=queue.dequeue(), 
+	        graph, globalBest, store=(queue.enqueue(_)))
   }
 
-  def startCalculation() = {
-    
-    initialExpand()
-    
-    if (queue.isEmpty) deliverResultsAndShutdown()    	    
+  def startCalculation() = {    
+    initialExpand()    
+    if (queue.isEmpty) 
+      deliverResultsAndShutdown()       
 	else {	         
 		expectedResultCount = queue.size		
 		queue map (workers ! Work(_))    
@@ -122,12 +87,10 @@ class Master(
   def receive = {
     
     case Start => 
-      println("master received start")
       customer = sender
       startCalculation()
       
     case Result(state) => 
-      println("master received result", state)
       resultsReceived += 1
       if (state betterThan globalBest) {
         globalBest = state
@@ -138,25 +101,27 @@ class Master(
         deliverResultsAndShutdown()
               
     case _ => println("master received unknown message")
-  }
-        
+  }        
 }
 
 
-class ActorSolver(using: Solver, workerCount: Int = 4,
-    initialExpandRatio: Int = 50) extends Solver() {
+class ActorSolver(
+    using: Solver, 
+    val workerCount: Int = 4,
+    initialExpandRatio: Int = 50, 
+    timeLimit: Duration = 600 seconds) extends Solver {
 
-  def solve(graph: Graph, initialState: State, best: State) = {
+  def solve(task: Task) = {
     
     val system = ActorSystem("TspSystem")
     
-    val master = system.actorOf(Props(
-        new Master(using, graph, initialState, best, 
-            workerCount, initialExpandRatio)), name="master")
+    val master = system.actorOf(
+        Props(new Master(using, task, workerCount, initialExpandRatio)), 
+        name="master")
     
-    val future = (master ? Start)(600 seconds)
+    val future = (master ? Start)(timeLimit)
     
-    Await.result(future, 600 seconds).asInstanceOf[State]    
+    Await.result(future, timeLimit).asInstanceOf[State]    
     
   }
   

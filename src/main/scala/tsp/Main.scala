@@ -28,12 +28,12 @@ object Main extends App {
     
   else {
     val graph = FileReader loadGraph args(0)
+    println(graph)
     
     val result1 = (TSP using SerialSolver)(graph)
     println("Serial solver", result1)
     
-    val actorSolver = new ActorSolver(using=SerialSolver,
-        initialExpandRatio=10)	  
+    val actorSolver = new ActorSolver(using=SerialSolver)	  
     val result2 = (TSP using actorSolver)(graph)    
     println(
         "Actor solver with %s workers" format actorSolver.workerCount,

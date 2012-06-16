@@ -26,7 +26,7 @@ class Worker(solver: Solver, graph: Graph) extends Actor {
       
     case Best(state) => localBest = state
       
-    case _ => println("worker received unknown message")     
+    case x => println("worker received unknown message:", x)     
   }  
   
   def process(state: State) = {
@@ -71,7 +71,7 @@ class Master(
       deliverResultsAndShutdown()       
 	else {	         
 		expectedResultCount = queue.size		
-		queue map (workers ! Work(_))    
+		queue foreach (workers ! Work(_))    
 	}    
   }
   
@@ -100,7 +100,7 @@ class Master(
       if (finished) 
         deliverResultsAndShutdown()
               
-    case _ => println("master received unknown message")
+    case x => println("master received unknown message:", x)
   }        
 }
 
@@ -121,8 +121,6 @@ class ActorSolver(
     
     val future = (master ? Start)(timeLimit)
     
-    Await.result(future, timeLimit).asInstanceOf[State]    
-    
-  }
-  
+    Await.result(future, timeLimit).asInstanceOf[State]        
+  }  
 }
